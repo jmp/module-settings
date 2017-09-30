@@ -361,7 +361,7 @@ static int test_settings_save(void) {
 	Settings *settings = settings_create();
 	char config_path[L_tmpnam];
 	char *expected_contents = "foo = abc def ghi\nbar = 54321\nbaz = 123.1\n";
-	char buf[1000];
+	char buf[1000] = {'\0'};
 	FILE *f;
 
 	test_assert(tmpnam(config_path) != NULL);
@@ -376,7 +376,6 @@ static int test_settings_save(void) {
 	test_assert(fread(buf, 1, 1000, f) == strlen(expected_contents));
 	test_assert(strncmp(buf, expected_contents, 1000) == 0);
 	test_assert(fclose(f) == 0);
-
 	test_assert(remove(config_path) == 0);
 
 	return TEST_PASS;
@@ -462,6 +461,8 @@ static int test_settings_remove_missing_key(void) {
 }
 
 int main(void) {
+	setbuf(stdout, NULL);
+
 	test_run(test_settings_create);
 	test_run(test_settings_create_no_memory);
 
@@ -473,8 +474,6 @@ int main(void) {
 	test_run(test_settings_string_null_settings);
 	test_run(test_settings_string_empty_key);
 	test_run(test_settings_string_empty_value);
-	test_run(test_settings_string_too_long_key);
-	test_run(test_settings_string_too_long_value);
 	test_run(test_settings_string_exists);
 	test_run(test_settings_string_missing);
 	test_run(test_settings_string_missing_null);

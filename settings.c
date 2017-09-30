@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
+#include <float.h>
 #include "settings.h"
 
 /* Optionally, use the memory module */
@@ -9,32 +11,26 @@
 	#include "memory.h"
 #else
 	#define memory_malloc malloc
+	#define memory_realloc realloc
 	#define memory_free free
 #endif
+
+/* Utility macros for calculating the number of digits for integers */
+#define STRINGIFY(x) #x
+#define NUM_DIGITS(x) (sizeof(STRINGIFY(x)) - 1)
+
+/* Maximum number of digits for ints and doubles */
+#define INT_DIGITS (NUM_DIGITS(INT_MAX) + 1)
+#define DBL_DIGITS (3 + DBL_MANT_DIG - DBL_MIN_EXP)
 
 /*
  * Configurable limits that can be set on compile-time.
  */
 
-/* Maximum length for keys, including the NULL-terminator */
-#ifndef CONFIG_KEY_LENGTH
-#define CONFIG_KEY_LENGTH 128
-#endif
-
-/* Maximum length for values, including the NULL-terminator */
-#ifndef CONFIG_VALUE_LENGTH
-#define CONFIG_VALUE_LENGTH 128
-#endif
-
-/* Buffer size for reading lines in files */
-#ifndef CONFIG_LINE_LENGTH
-#define CONFIG_LINE_LENGTH 1024
-#endif
-
 /* A single key-value pair */
 struct Pair {
-	char key[CONFIG_KEY_LENGTH];
-	char value[CONFIG_VALUE_LENGTH];
+	char *key;
+	char *value;
 	struct Pair *next;
 	struct Pair *prev;
 };
@@ -77,15 +73,47 @@ static void trim(char *str) {
 }
 
 /*
+ * (Re)allocates space for the given array.
+ */
+static char *resize(char *array, size_t size) {
+	size += 1; /* Leave room for terminator */
+
+	if (array == NULL || strlen(array) <= size) {
+		array = memory_realloc(array, size);
+		if (array) {
+			/* Make sure it terminates */
+			array[size - 1] = '\0';
+		}
+	}
+
+	return array;
+}
+
+/*
  * Copy key and value from the source to destination.
  */
-static void copy_pair(char *dst_key, char *dst_value, const char *src_key, const char *src_value) {
+static int copy_pair(char *dst_key, char *dst_val, const char *src_key, const char *src_val) {
+	size_t key_len;
+	size_t val_len;
+
+	/* Cannot insert NULL */
+	if (dst_key == NULL || dst_val == NULL) {
+		return 0;
+	}
+
+	/* Leave room for the NUL terminator */
+	key_len = strlen(src_key) + 1;
+	val_len = strlen(src_val) + 1;
+
 	/* Replace key and value */
-	strncpy(dst_key, src_key, CONFIG_KEY_LENGTH);
-	strncpy(dst_value, src_value, CONFIG_VALUE_LENGTH);
+	strncpy(dst_key, src_key, key_len);
+	strncpy(dst_val, src_val, val_len);
+
 	/* Make sure they terminate at least at the very end */
-	dst_key[CONFIG_KEY_LENGTH - 1] = '\0';
-	dst_value[CONFIG_VALUE_LENGTH - 1] = '\0';
+	dst_key[key_len - 1] = '\0';
+	dst_val[val_len - 1] = '\0';
+
+	return 1;
 }
 
 /*
@@ -99,14 +127,33 @@ static struct Pair *create_pair(const char *key, const char *value) {
 	if (key != NULL && value != NULL) {
 		pair = memory_malloc(sizeof(struct Pair));
 		if (pair) {
-			copy_pair(pair->key, pair->value, key, value);
-			/* By default this is the last pair */
+			/* By default this is the last pair with empty key and value */
+			pair->key = resize(NULL, strlen(key));
+			pair->value = resize(NULL, strlen(value));
 			pair->next = NULL;
 			pair->prev = NULL;
+			/* Fill pair with the new values */
+			if (!copy_pair(pair->key, pair->value, key, value)) {
+				free(pair);
+				pair = NULL;
+			}
 		}
 	}
 
 	return pair;
+}
+
+/*
+ * Free the memory allocated for the given pair.
+ */
+static void free_pair(struct Pair *pair) {
+	if (pair != NULL) {
+		free(pair->key);
+		pair->key = NULL;
+		free(pair->value);
+		pair->value = NULL;
+		free(pair);
+	}
 }
 
 /*
@@ -118,7 +165,7 @@ static int keys_match(const char *key1, const char *key2) {
 	if (key1 == NULL || key2 == NULL) {
 		return 0;
 	}
-	return strncmp(key1, key2, CONFIG_KEY_LENGTH) == 0;
+	return strcmp(key1, key2) == 0;
 }
 
 /*
@@ -139,6 +186,35 @@ static struct Pair *find_pair(Settings *settings, const char *key) {
 	return NULL;
 }
 
+/*
+ * Read a line from the given file.
+ */
+char *get_line(FILE *f) {
+	size_t size = BUFSIZ;
+	size_t len;
+	char *buf = memory_malloc(size);
+
+	if (buf == NULL || fgets(buf, size, f) == NULL) {
+		return NULL;
+	}
+
+	len = strlen(buf);
+	while (strchr(buf, '\n') == NULL) {
+		size += BUFSIZ;
+		buf = memory_realloc(buf, size);
+		if (fgets(buf + len, size - len, f) == NULL) {
+			return buf;
+		}
+		len += strlen(buf + len);
+	}
+
+	if (buf) {
+		buf[size - 1] = '\0';
+	}
+
+	return buf;
+}
+
 Settings *settings_create(void) {
 	Settings *settings = memory_malloc(sizeof(Settings));
 	if (settings) {
@@ -153,7 +229,7 @@ void settings_free(Settings *settings) {
 		struct Pair *pair = settings->first;
 		while (pair != NULL) {
 			struct Pair *next = pair->next;
-			memory_free(pair);
+			free_pair(pair);
 			pair = next;
 		}
 	}
@@ -161,7 +237,7 @@ void settings_free(Settings *settings) {
 
 int settings_load(Settings *settings, const char *path) {
 	FILE *f;
-	char line[CONFIG_LINE_LENGTH];
+	char *line;
 
 	/* Settings and path are required */
 	if (settings == NULL || path == NULL) {
@@ -174,7 +250,7 @@ int settings_load(Settings *settings, const char *path) {
 	}
 
 	/* Successfully opened, so read any settings */
-	while (fgets(line, CONFIG_LINE_LENGTH, f) != NULL) {
+	while ((line = get_line(f)) != NULL) {
 		/* Look for an equals sign */
 		char *p = strchr(line, '=');
 		if (p != NULL) {
@@ -183,11 +259,21 @@ int settings_load(Settings *settings, const char *path) {
 			 * minus the equals sign (if the equals sign happens
 			 * to be at the very beginning or end of the line.
 			 */
-			char key[CONFIG_LINE_LENGTH];
-			char val[CONFIG_LINE_LENGTH];
+			char *key = memory_malloc(strlen(line) + 1);
+			char *val = memory_malloc(strlen(line) + 1);
+			size_t key_len;
+			size_t val_len;
+
+			/* Not enough memory for key and value */
+			if (key == NULL || val == NULL) {
+				free(key);
+				free(val);
+				return 0;
+			}
+
 			/* Lengths of each part */
-			const size_t key_len = p - line;
-			const size_t val_len = strlen(p + 1);
+			key_len = p - line;
+			val_len = strlen(p + 1);
 			/* Split at the equals sign */
 			strncpy(key, line, p - line);
 			strncpy(val, p + 1, strlen(p + 1));
@@ -200,6 +286,7 @@ int settings_load(Settings *settings, const char *path) {
 			/* Add to settings */
 			settings_set_string(settings, key, val);
 		}
+		free(line);
 	}
 
 	fclose(f);
@@ -264,15 +351,11 @@ int settings_set_string(Settings *settings, const char *key, const char *value) 
 		return 0;
 	}
 
-	if (strlen(key) >= CONFIG_KEY_LENGTH || strlen(value) >= CONFIG_VALUE_LENGTH) {
-		/* Key or value is too long */
-		return 0;
-	}
-
 	pair = find_pair(settings, key);
 	if (pair != NULL) {
-		copy_pair(pair->key, pair->value, key, value);
-		result = 1;
+		pair->key = resize(pair->key, strlen(key));
+		pair->value = resize(pair->value, strlen(value));
+		result = copy_pair(pair->key, pair->value, key, value);
 	} else {
 		/* We have to create a new pair */
 		pair = create_pair(key, value);
@@ -295,14 +378,20 @@ int settings_set_string(Settings *settings, const char *key, const char *value) 
 }
 
 int settings_set_int(Settings *settings, const char *key, int value) {
-	char value_str[CONFIG_VALUE_LENGTH] = { '\0' };
-	snprintf(value_str, CONFIG_VALUE_LENGTH, "%d", value);
+	/* Convert int to string */
+	char value_str[INT_DIGITS + 1] = { '\0' };
+	snprintf(value_str, INT_DIGITS, "%d", value);
+
+	/* Save the string */
 	return settings_set_string(settings, key, value_str);
 }
 
 int settings_set_float(Settings *settings, const char *key, float value) {
-	char value_str[CONFIG_VALUE_LENGTH] = { '\0' };
-	snprintf(value_str, CONFIG_VALUE_LENGTH, "%f", value);
+	/* Convert float to string */
+	char value_str[DBL_DIGITS + 1] = { '\0' };
+	snprintf(value_str, DBL_DIGITS, "%f", value);
+
+	/* Save the string */
 	return settings_set_string(settings, key, value_str);
 }
 

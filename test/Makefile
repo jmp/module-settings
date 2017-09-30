@@ -1,6 +1,6 @@
 CC=gcc
 TARGET=test
-CFLAGS=-I.. -ansi -pedantic -Wall -Werror -Wextra -Wno-unused \
+CFLAGS=-I.. -std=c99 -pedantic -Wall -Werror -Wextra \
 	-DWRAP_MALLOC -Wl,--wrap,malloc \
 	-DWRAP_REALLOC -Wl,--wrap,realloc
 SOURCES=test.c ../settings.c

@@ -99,30 +99,6 @@ static int test_settings_string_empty_value(void) {
 	return TEST_PASS;
 }
 
-static int test_settings_string_too_long_key(void) {
-	Settings *settings = settings_create();
-	char too_long_key[500 + 1];
-	memset(too_long_key, 'X', 500);
-	too_long_key[500] = '\0';
-	test_assert(strlen(too_long_key) == 500);
-	test_assert(!settings_set_string(settings, too_long_key, "abc"));
-	settings_free(settings);
-
-	return TEST_PASS;
-}
-
-static int test_settings_string_too_long_value(void) {
-	Settings *settings = settings_create();
-	char too_long_value[500 + 1] = { 'X' };
-	memset(too_long_value, 'X', 500);
-	too_long_value[500] = '\0';
-	test_assert(strlen(too_long_value) == 500);
-	test_assert(!settings_set_string(settings, "foo", too_long_value));
-	settings_free(settings);
-
-	return TEST_PASS;
-}
-
 static int test_settings_string_exists(void) {
 	Settings *settings = settings_create();
 	test_assert(settings_set_string(settings, "foo", "abc"));

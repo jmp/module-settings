@@ -254,29 +254,15 @@ int settings_load(Settings *settings, const char *path) {
 		/* Look for an equals sign */
 		char *p = strchr(line, '=');
 		if (p != NULL) {
-			/*
-			 * At worst, one part will contain the entire line
-			 * minus the equals sign (if the equals sign happens
-			 * to be at the very beginning or end of the line.
-			 */
-			char *key = memory_malloc(strlen(line) + 1);
-			char *val = memory_malloc(strlen(line) + 1);
-			size_t key_len;
-			size_t val_len;
-
-			/* Not enough memory for key and value */
-			if (key == NULL || val == NULL) {
-				memory_free(key);
-				memory_free(val);
-				return 0;
-			}
-
 			/* Lengths of each part */
-			key_len = p - line;
-			val_len = strlen(p + 1);
+			const size_t key_len = p - line;      /* [####=....] */
+			const size_t val_len = strlen(p + 1); /* [....=####] */
+			/* Buffers of appropriate length*/
+			char key[key_len];
+			char val[val_len];
 			/* Split at the equals sign */
-			strncpy(key, line, p - line);
-			strncpy(val, p + 1, strlen(p + 1));
+			strncpy(key, line, key_len);
+			strncpy(val, p + 1, val_len);
 			/* Terminate the parts */
 			key[key_len - 1] = '\0';
 			val[val_len - 1] = '\0';

@@ -23,10 +23,6 @@
 #define INT_DIGITS (NUM_DIGITS(INT_MAX) + 1)
 #define DBL_DIGITS (3 + DBL_MANT_DIG - DBL_MIN_EXP)
 
-/*
- * Configurable limits that can be set on compile-time.
- */
-
 /* A single key-value pair */
 struct Pair {
 	char *key;

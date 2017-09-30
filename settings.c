@@ -117,6 +117,19 @@ static int copy_pair(char *dst_key, char *dst_val, const char *src_key, const ch
 }
 
 /*
+ * Free the memory allocated for the given pair.
+ */
+static void free_pair(struct Pair *pair) {
+	if (pair != NULL) {
+		memory_free(pair->key);
+		pair->key = NULL;
+		memory_free(pair->value);
+		pair->value = NULL;
+		memory_free(pair);
+	}
+}
+
+/*
  * Create a new key/value pair from the given key and value.
  * Returns a newly allocated pair, or NULL on failure.
  */
@@ -134,26 +147,13 @@ static struct Pair *create_pair(const char *key, const char *value) {
 			pair->prev = NULL;
 			/* Fill pair with the new values */
 			if (!copy_pair(pair->key, pair->value, key, value)) {
-				free(pair);
+				free_pair(pair);
 				pair = NULL;
 			}
 		}
 	}
 
 	return pair;
-}
-
-/*
- * Free the memory allocated for the given pair.
- */
-static void free_pair(struct Pair *pair) {
-	if (pair != NULL) {
-		free(pair->key);
-		pair->key = NULL;
-		free(pair->value);
-		pair->value = NULL;
-		free(pair);
-	}
 }
 
 /*
@@ -266,8 +266,8 @@ int settings_load(Settings *settings, const char *path) {
 
 			/* Not enough memory for key and value */
 			if (key == NULL || val == NULL) {
-				free(key);
-				free(val);
+				memory_free(key);
+				memory_free(val);
 				return 0;
 			}
 
@@ -286,7 +286,7 @@ int settings_load(Settings *settings, const char *path) {
 			/* Add to settings */
 			settings_set_string(settings, key, val);
 		}
-		free(line);
+		memory_free(line);
 	}
 
 	fclose(f);
@@ -347,7 +347,7 @@ int settings_set_string(Settings *settings, const char *key, const char *value) 
 	struct Pair *pair;
 
 	if (settings == NULL || key == NULL || value == NULL) {
-		/* Settings, key and pair are mandatory */
+		/* Settings, key, and value are mandatory */
 		return 0;
 	}
 

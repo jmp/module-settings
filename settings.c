@@ -63,7 +63,7 @@ static void trim(char *str) {
 			str[i - begin] = str[i];
 		}
 
-		/* Make sure it's NULL-terminated */
+		/* Make sure it's NUL-terminated */
 		str[i - begin] = '\0';
 	}
 }
@@ -72,7 +72,7 @@ static void trim(char *str) {
  * (Re)allocates space for the given array.
  */
 static char *resize(char *array, size_t size) {
-	size += 1; /* Leave room for terminator */
+	size += 1; /* Leave room for NUL */
 
 	if (array == NULL || strlen(array) <= size) {
 		array = memory_realloc(array, size);
@@ -97,7 +97,7 @@ static int copy_pair(char *dst_key, char *dst_val, const char *src_key, const ch
 		return 0;
 	}
 
-	/* Leave room for the NUL terminator */
+	/* Leave room for NUL */
 	key_len = strlen(src_key) + 1;
 	val_len = strlen(src_val) + 1;
 

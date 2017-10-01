@@ -281,24 +281,22 @@ static int test_settings_float_missing(void) {
 
 static int test_settings_load(void) {
 	Settings *settings = settings_create();
-	char config_path[L_tmpnam];
+	char config_path[] = "test_settings_load.txt";
+	int load_success;
 	FILE *f;
 
-	test_assert(tmpnam(config_path) != NULL);
-	test_assert(config_path != NULL);
-	f = fopen(config_path, "wt");
-	test_assert(f != NULL);
+	test_assert((f = fopen(config_path, "wt")) != NULL);
 	test_assert(fprintf(f, "foo  bar  = abc def =   ghi   \n") > 0);
 	test_assert(fprintf(f, "  bar =   54321 \n") > 0);
 	test_assert(fprintf(f, "baz =  123.1\n") > 0);
 	test_assert(fclose(f) == 0);
-
-	test_assert(settings_load(settings, config_path));
+	load_success = settings_load(settings, config_path);
+	test_assert(remove(config_path) == 0);
+	test_assert(load_success);
 	test_assert(strncmp("abc def =   ghi", settings_get_string(settings, "foo  bar", "ERROR"), 64) == 0);
 	test_assert(settings_get_int(settings, "bar", 9999) == 54321);
 	test_assert(settings_get_float(settings, "baz", 9999.0f) == 123.1f);
 	settings_free(settings);
-	test_assert(remove(config_path) == 0);
 
 	return TEST_PASS;
 }
@@ -335,12 +333,12 @@ static int test_settings_load_null_path(void) {
 
 static int test_settings_save(void) {
 	Settings *settings = settings_create();
-	char config_path[L_tmpnam];
+	char config_path[] = "test_settings_save.txt";
 	char *expected_contents = "foo = abc def ghi\nbar = 54321\nbaz = 123.1\n";
 	char buf[1000] = {'\0'};
+	size_t bytes_read;
 	FILE *f;
 
-	test_assert(tmpnam(config_path) != NULL);
 	settings_set_string(settings, "foo", "abc def ghi");
 	settings_set_string(settings, "bar", "54321");
 	settings_set_string(settings, "baz", "123.1");
@@ -349,29 +347,31 @@ static int test_settings_save(void) {
 
 	/* Check file */
 	test_assert((f = fopen(config_path, "rt")) != NULL);
-	test_assert(fread(buf, 1, 1000, f) == strlen(expected_contents));
-	test_assert(strncmp(buf, expected_contents, 1000) == 0);
+	bytes_read = fread(buf, 1, 1000, f);
 	test_assert(fclose(f) == 0);
 	test_assert(remove(config_path) == 0);
+	test_assert(bytes_read == strlen(expected_contents));
+	test_assert(strncmp(buf, expected_contents, 1000) == 0);
 
 	return TEST_PASS;
 }
 
 static int test_settings_save_empty(void) {
 	Settings *settings = settings_create();
-	char config_path[L_tmpnam];
+	char config_path[] = "test_settings_save_empty.txt";
 	char buf[1000];
+	size_t bytes_read;
 	FILE *f;
 
-	test_assert(tmpnam(config_path) != NULL);
 	test_assert(settings_save(settings, config_path));
 	settings_free(settings);
 
 	/* Check file */
 	test_assert((f = fopen(config_path, "rt")) != NULL);
-	test_assert(fread(buf, 1, 1000, f) == 0);
+	bytes_read = fread(buf, 1, 1000, f);
 	test_assert(fclose(f) == 0);
 	test_assert(remove(config_path) == 0);
+	test_assert(bytes_read == 0);
 
 	return TEST_PASS;
 }
